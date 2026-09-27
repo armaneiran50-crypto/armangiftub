@@ -73,6 +73,7 @@ def test_full_flow_quote_compare_book_deliver(client, admin):
 
     r = client.post(f"/api/rfqs/{rfq_id}/dispatch", headers=admin)
     assert r.status_code == 200 and set(r.json()["dispatched_to"]) == {a, b}
+    assert {d["provider_id"] for d in client.get(f"/api/rfqs/{rfq_id}/dispatches", headers=admin).json()} == {a, b}
 
     qa = client.post(f"/api/rfqs/{rfq_id}/quotes", headers=admin, json={
         "provider_id": a, "charges": [{"name": "Ocean freight", "amount": 2100}, {"name": "THC origin", "amount": 150},

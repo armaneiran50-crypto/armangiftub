@@ -151,6 +151,13 @@ def dispatch_rfq(rfq_id: int, provider_ids: list[int] | None = None, db: Session
     return {"dispatched_to": sent, "status": rfq.status}
 
 
+@router.get("/{rfq_id}/dispatches")
+def rfq_dispatches(rfq_id: int, db: Session = Depends(get_db), _: User = Depends(staff)):
+    rfq = get_rfq(db, rfq_id)
+    return [{"provider_id": d.provider_id, "company": d.provider.company.legal_name, "match_score": d.match_score,
+             "sent_at": d.sent_at, "responded_at": d.responded_at} for d in rfq.dispatches]
+
+
 @router.post("/{rfq_id}/quotes", response_model=QuoteOut, status_code=201)
 def add_quote(rfq_id: int, body: QuoteIn, db: Session = Depends(get_db), user: User = Depends(staff)):
     """Quote capture. In the MVP Ops enters quotes received by email/WhatsApp (or via the AI parser)."""

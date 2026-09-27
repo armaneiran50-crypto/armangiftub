@@ -16,7 +16,13 @@ def client(monkeypatch):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    url = os.environ.get("LOGIRAD_TEST_DATABASE_URL")
+    if url:  # e.g. run the suite against PostgreSQL
+        engine = create_engine(url)
+        from app.db import Base
+        Base.metadata.drop_all(engine)
+    else:
+        engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     import app.main as main
     monkeypatch.setattr(main, "engine", engine)
