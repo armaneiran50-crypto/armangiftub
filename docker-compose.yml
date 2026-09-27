@@ -45,6 +45,7 @@ services:
       context: ./frontend
       args:
         BACKEND_URL: http://backend:8000
+        SITE_URL: https://${DOMAIN:-localhost}
     restart: unless-stopped
     depends_on:
       - backend

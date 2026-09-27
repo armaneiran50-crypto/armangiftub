@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select
 
-from .api import auth, misc, portal, providers, rfqs, whatsapp
+from .api import auth, lanes, misc, portal, providers, rfqs, whatsapp
 from .config import get_settings
 from .db import SessionLocal, engine
 from .models import Role, User
@@ -54,7 +54,7 @@ app = FastAPI(title="Logirad API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in get_settings().cors_origins.split(",")],
                    allow_methods=["*"], allow_headers=["*"])
 for r in (auth.router, rfqs.router, rfqs.bookings_router, providers.router, portal.router, whatsapp.router,
-          misc.router):
+          lanes.router, misc.router):
     app.include_router(r)
 
 

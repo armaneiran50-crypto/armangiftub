@@ -3,6 +3,7 @@ import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.SITE_URL || "http://localhost:3000"),
   title: "لجی‌راد | شبکه هوشمند حمل بین‌المللی",
   description: "یک درخواست، چند پیشنهاد قیمت معتبر از شرکت‌های حمل؛ مقایسه شفاف و اجرای قابل پیگیری.",
 };
@@ -21,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Link href="/" className="logo">Logi<span>rad</span></Link>
             <nav>
               <Link href="/#rfq">درخواست قیمت</Link>
-              <Link href="/#calculator">ماشین‌حساب</Link>
+              <Link href="/shipping">مسیرها</Link>
               <Link href="/#track">پیگیری</Link>
               <Link href="/portal">شرکت‌های حمل</Link>
               <Link href="/ops">پنل عملیات</Link>

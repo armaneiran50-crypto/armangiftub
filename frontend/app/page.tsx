@@ -1,7 +1,9 @@
+import Link from "next/link";
 import Calculator from "@/components/Calculator";
 import RFQForm from "@/components/RFQForm";
 import Track from "@/components/Track";
 import WhatsAppButton from "@/components/WhatsAppButton";
+import { LANES } from "@/lib/lanes";
 
 const STEPS = [
   ["۱. یک درخواست", "مسیر، بار و زمان را یک‌بار ثبت کنید"],
@@ -27,6 +29,12 @@ export default function Home() {
           <Track />
         </div>
       </div>
+      <section className="card">
+        <h2>مسیرهای پرتکرار</h2>
+        <div className="row">
+          {LANES.map((l) => <Link key={l.slug} href={`/shipping/${l.slug}`} className="badge">{l.originName} ← {l.destinationName}</Link>)}
+        </div>
+      </section>
       <WhatsAppButton />
     </main>
   );

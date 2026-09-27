@@ -26,8 +26,9 @@ function payload(f: Form) {
 
 type Result = { reference: string; status: string; missing_fields: string[] };
 
-export default function RFQForm() {
-  const [f, setF] = useState<Form>(EMPTY);
+export default function RFQForm({ initial }: { initial?: Partial<Form> } = {}) {
+  const start: Form = { ...EMPTY, ...(initial as Form | undefined) };
+  const [f, setF] = useState<Form>(start);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
@@ -85,7 +86,7 @@ export default function RFQForm() {
           </div>
         )}
         <div className="actions">
-          <button className="secondary" onClick={() => { setResult(null); setF(EMPTY); }}>ثبت درخواست جدید</button>
+          <button className="secondary" onClick={() => { setResult(null); setF(start); }}>ثبت درخواست جدید</button>
         </div>
       </div>
     );
@@ -164,12 +165,13 @@ export default function RFQForm() {
       <div className="grid">
         <div><label>نام</label><input value={f.contact_name} onChange={set("contact_name")} /></div>
         <div><label>شرکت</label><input value={f.company_name} onChange={set("company_name")} /></div>
-        <div><label>ایمیل *</label><input required type="email" dir="ltr" value={f.contact_email} onChange={set("contact_email")} /></div>
+        <div><label>ایمیل</label><input type="email" dir="ltr" value={f.contact_email} onChange={set("contact_email")} /></div>
         <div><label>تلفن / واتس‌اپ</label><input dir="ltr" value={f.contact_phone} onChange={set("contact_phone")} /></div>
       </div>
 
+      <p className="muted" style={{ fontSize: 13 }}>حداقل یکی از ایمیل یا شماره تماس را وارد کنید.</p>
       {error && <div className="alert err">{error}</div>}
-      <div className="actions"><button disabled={busy}>{busy ? "در حال ارسال…" : "دریافت پیشنهاد قیمت"}</button></div>
+      <div className="actions"><button disabled={busy || (!f.contact_email && !f.contact_phone)}>{busy ? "در حال ارسال…" : "دریافت پیشنهاد قیمت"}</button></div>
     </form>
   );
 }

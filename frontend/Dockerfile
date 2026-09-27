@@ -9,7 +9,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Rewrites are resolved at build time; point them at the backend service.
 ARG BACKEND_URL=http://backend:8000
-ENV BACKEND_URL=$BACKEND_URL NEXT_TELEMETRY_DISABLED=1
+ARG SITE_URL=http://localhost:3000
+ENV BACKEND_URL=$BACKEND_URL SITE_URL=$SITE_URL NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:22-alpine
