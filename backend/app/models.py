@@ -146,6 +146,8 @@ class Dispatch(Base):
     match_score: Mapped[float] = mapped_column(Float, default=0.0)
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decline_reason: Mapped[str | None] = mapped_column(String(255))
 
     rfq: Mapped[RFQ] = relationship(back_populates="dispatches")
     provider: Mapped[Provider] = relationship()
@@ -165,6 +167,7 @@ class Quote(Base):
     exclusions: Mapped[str | None] = mapped_column(Text)
     completeness: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[str] = mapped_column(String(16), default="submitted")  # submitted|accepted|rejected|expired
+    submitted_via: Mapped[str] = mapped_column(String(16), default="ops")  # ops|portal|ai
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     rfq: Mapped[RFQ] = relationship(back_populates="quotes")

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import User
-from ..schemas import LoginOut, UserIn
+from ..schemas import LoginOut, PasswordChangeIn, UserIn
 from ..security import admin_only, create_token, current_user, hash_password, verify_password
 from ..services import audit
 
@@ -35,3 +35,13 @@ def create_user(body: UserIn, db: Session = Depends(get_db), admin: User = Depen
     audit.log(db, admin.email, "user.create", "user", user.id, {"role": body.role})
     db.commit()
     return {"id": user.id, "email": user.email, "role": user.role}
+
+
+@router.post("/password")
+def change_password(body: PasswordChangeIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    if not verify_password(body.current_password, user.password_hash):
+        raise HTTPException(400, "Current password is incorrect")
+    user.password_hash = hash_password(body.new_password)
+    audit.log(db, user.email, "user.password_change", "user", user.id, {})
+    db.commit()
+    return {"ok": True}

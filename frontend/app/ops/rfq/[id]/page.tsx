@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Login from "@/components/Login";
+import QuoteForm from "@/components/QuoteForm";
 import { api } from "@/lib/api";
 import { CARGO_CLASSES, countryName, fa, FIELDS, LABELS, MODES, STATUSES } from "@/lib/labels";
 import { useAuth } from "@/lib/useAuth";
@@ -13,7 +14,7 @@ type RFQ = Record<string, unknown> & {
   completeness: number; lead_score: number;
 };
 type Match = { provider_id: number; company: string; tier: string; verified: boolean; lane_fit: number; provider_score: number; match_score: number };
-type Dispatch = { provider_id: number; company: string; responded_at: string | null };
+type Dispatch = { provider_id: number; company: string; responded_at: string | null; declined_at: string | null; decline_reason: string | null };
 type CompareRow = {
   quote_id: number; provider_id: number; company: string; currency: string; total: number;
   by_category: Record<string, number>; transit_days: number | null; valid_until: string | null; expired: boolean;
@@ -58,14 +59,16 @@ export default function RFQDetail() {
 
   useEffect(() => { if (me) load(); }, [me, load]);
 
-  async function act(fn: () => Promise<unknown>, ok: string) {
+  async function act(fn: () => Promise<unknown>, ok: string): Promise<boolean> {
     setMsg(null);
     try {
       await fn();
       setMsg({ kind: "ok", text: ok });
       await load();
+      return true;
     } catch (e) {
       setMsg({ kind: "err", text: (e as Error).message });
+      return false;
     }
   }
 
@@ -127,7 +130,7 @@ export default function RFQDetail() {
                     <td>{m.lane_fit === 1 ? "دقیق" : "عمومی"}</td>
                     <td className="num">{fa(m.provider_score, 1)}</td>
                     <td className="num">{fa(m.match_score, 1)}</td>
-                    <td>{dispatchedIds.has(m.provider_id) ? <span className="badge brand">ارسال شده</span> : "—"}</td>
+                    <td><DispatchState d={dispatches.find((d) => d.provider_id === m.provider_id)} /></td>
                   </tr>
                 ))}
                 {!matches.length && <tr><td colSpan={5} className="muted">هیچ شرکت واجد شرایطی برای این مسیر و نوع حمل نیست.</td></tr>}
@@ -185,6 +188,13 @@ export default function RFQDetail() {
   );
 }
 
+function DispatchState({ d }: { d?: Dispatch }) {
+  if (!d) return <>—</>;
+  if (d.responded_at) return <span className="badge ok">قیمت داده</span>;
+  if (d.declined_at) return <span className="badge err" title={d.decline_reason || ""}>انصراف: {d.decline_reason}</span>;
+  return <span className="badge brand">منتظر پاسخ</span>;
+}
+
 function Compliance({ isAdmin, onDecide }: { isAdmin: boolean; onDecide: (d: "release" | "reject", reason: string) => void }) {
   const [reason, setReason] = useState("");
   return (
@@ -205,51 +215,21 @@ function Compliance({ isAdmin, onDecide }: { isAdmin: boolean; onDecide: (d: "re
   );
 }
 
-function QuoteEntry({ dispatches, onSubmit }: { dispatches: Dispatch[]; onSubmit: (body: object) => Promise<void> }) {
-  const pending = dispatches.filter((d) => !d.responded_at);
-  const [provider, setProvider] = useState<number>(pending[0]?.provider_id ?? dispatches[0].provider_id);
-  const [lines, setLines] = useState([{ name: "Ocean freight", amount: "", category: "freight" }]);
-  const [f, setF] = useState({ currency: "USD", transit_days: "", valid_until: "", exclusions: "" });
-
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    onSubmit({
-      provider_id: provider, currency: f.currency,
-      charges: lines.filter((l) => l.amount !== "").map((l) => ({ name: l.name, amount: Number(l.amount), category: l.category || null })),
-      transit_days: f.transit_days ? Number(f.transit_days) : null, valid_until: f.valid_until || null, exclusions: f.exclusions || null,
-    }).then(() => setLines([{ name: "Ocean freight", amount: "", category: "freight" }]));
-  }
-
+function QuoteEntry({ dispatches, onSubmit }: { dispatches: Dispatch[]; onSubmit: (body: object) => Promise<boolean> }) {
+  const open = dispatches.filter((d) => !d.declined_at);
+  const [provider, setProvider] = useState<number>((open.find((d) => !d.responded_at) || open[0] || dispatches[0]).provider_id);
   return (
-    <form className="card" onSubmit={submit}>
+    <div className="card">
       <h2>ثبت پیشنهاد قیمت دریافتی</h2>
-      <p className="sub">پیشنهادهایی که از ایمیل یا واتس‌اپ می‌رسند را اینجا وارد کنید؛ هزینه‌ها خودکار دسته‌بندی می‌شوند.</p>
-      <div className="grid">
+      <p className="sub">پیشنهادهایی که از ایمیل یا واتس‌اپ می‌رسند را اینجا وارد کنید؛ شرکت‌ها می‌توانند خودشان هم از پورتال قیمت بدهند.</p>
+      <QuoteForm onSubmit={(q) => onSubmit({ ...q, provider_id: provider })} header={
         <div><label>شرکت</label>
           <select value={provider} onChange={(e) => setProvider(Number(e.target.value))}>
-            {dispatches.map((d) => <option key={d.provider_id} value={d.provider_id}>{d.company}{d.responded_at ? " (پاسخ داده)" : ""}</option>)}
+            {dispatches.map((d) => <option key={d.provider_id} value={d.provider_id}>
+              {d.company}{d.responded_at ? " (قیمت داده)" : d.declined_at ? " (انصراف)" : ""}</option>)}
           </select></div>
-        <div><label>ارز</label><input dir="ltr" maxLength={3} value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value.toUpperCase() })} /></div>
-        <div><label>زمان ترانزیت (روز)</label><input type="number" min="1" dir="ltr" value={f.transit_days} onChange={(e) => setF({ ...f, transit_days: e.target.value })} /></div>
-        <div><label>اعتبار تا</label><input type="date" dir="ltr" value={f.valid_until} onChange={(e) => setF({ ...f, valid_until: e.target.value })} /></div>
-      </div>
-      <h3>ردیف‌های هزینه</h3>
-      {lines.map((l, i) => (
-        <div className="grid" key={i} style={{ marginBottom: 8 }}>
-          <input dir="ltr" placeholder="Charge name" value={l.name} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
-          <input type="number" min="0" step="any" dir="ltr" placeholder="Amount" value={l.amount} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))} />
-          <select value={l.category} onChange={(e) => setLines(lines.map((x, j) => j === i ? { ...x, category: e.target.value } : x))}>
-            <option value="">تشخیص خودکار</option><option value="freight">کرایه اصلی</option><option value="origin">هزینه مبدأ</option>
-            <option value="destination">هزینه مقصد</option><option value="other">سایر</option>
-          </select>
-        </div>
-      ))}
-      <div className="row">
-        <button type="button" className="secondary" onClick={() => setLines([...lines, { name: "", amount: "", category: "" }])}>+ ردیف هزینه</button>
-      </div>
-      <div style={{ marginTop: 12 }}><label>استثناها (مثلاً عوارض گمرکی)</label><input value={f.exclusions} onChange={(e) => setF({ ...f, exclusions: e.target.value })} /></div>
-      <div className="actions"><button disabled={!lines.some((l) => l.amount !== "")}>ثبت پیشنهاد</button></div>
-    </form>
+      } />
+    </div>
   );
 }
 

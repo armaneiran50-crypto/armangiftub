@@ -20,7 +20,10 @@ def client(monkeypatch):
     if url:  # e.g. run the suite against PostgreSQL
         engine = create_engine(url)
         from app.db import Base
+        from sqlalchemy import text
         Base.metadata.drop_all(engine)
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
     else:
         engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)

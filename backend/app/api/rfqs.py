@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -12,8 +12,10 @@ from ..schemas import (BookingIn, BookingOut, ComplianceDecision, MilestoneIn, Q
                        RFQPublicOut, RFQUpdate)
 from ..security import admin_only, staff
 from ..services import audit, qualification
-from ..services.quotes import compare, is_expired, normalize_charges, quote_completeness
-from ..services.scoring import match, rank_prices
+from ..services import notify
+from ..services.quotes import compare, is_expired
+from ..services.quoting import submit_quote
+from ..services.scoring import lane_of, match, rank_prices
 
 router = APIRouter(prefix="/api/rfqs", tags=["rfqs"])
 bookings_router = APIRouter(prefix="/api/bookings", tags=["bookings"])
@@ -30,14 +32,10 @@ def get_rfq(db: Session, rfq_id: int) -> RFQ:
     return rfq
 
 
-def _utc(dt: datetime) -> datetime:
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-
-
 # ---------- Public intake ----------
 
 @router.post("", response_model=RFQPublicOut, status_code=201)
-def create_rfq(body: RFQIn, db: Session = Depends(get_db)):
+def create_rfq(body: RFQIn, background: BackgroundTasks, db: Session = Depends(get_db)):
     """Public endpoint: anyone can submit an RFQ (free for cargo owners, §6)."""
     rfq = RFQ(reference=new_reference(), **body.model_dump())
     qualification.apply(rfq)
@@ -46,6 +44,7 @@ def create_rfq(body: RFQIn, db: Session = Depends(get_db)):
     audit.log(db, body.contact_email or "anonymous", "rfq.create", "rfq", rfq.id,
               {"status": rfq.status, "flags": rfq.flags}, source=body.source)
     db.commit()
+    background.add_task(*notify.rfq_received(rfq.contact_email, rfq.reference))
     return RFQPublicOut(reference=rfq.reference, status=rfq.status, completeness=rfq.completeness,
                         missing_fields=rfq.missing_fields)
 
@@ -114,8 +113,8 @@ def rfq_matches(rfq_id: int, db: Session = Depends(get_db), _: User = Depends(st
 
 
 @router.post("/{rfq_id}/dispatch")
-def dispatch_rfq(rfq_id: int, provider_ids: list[int] | None = None, db: Session = Depends(get_db),
-                 user: User = Depends(staff)):
+def dispatch_rfq(rfq_id: int, background: BackgroundTasks, provider_ids: list[int] | None = None,
+                 db: Session = Depends(get_db), user: User = Depends(staff)):
     """Send the RFQ to the top-N matched providers (or an explicit Ops-reviewed list)."""
     rfq = get_rfq(db, rfq_id)
     if rfq.status == RFQStatus.compliance_hold:
@@ -141,8 +140,10 @@ def dispatch_rfq(rfq_id: int, provider_ids: list[int] | None = None, db: Session
         if r["provider_id"] in already:
             continue
         db.add(Dispatch(rfq_id=rfq.id, provider_id=r["provider_id"], match_score=r["match_score"]))
-        db.get(Provider, r["provider_id"]).rfqs_dispatched += 1
+        provider = db.get(Provider, r["provider_id"])
+        provider.rfqs_dispatched += 1
         sent.append(r["provider_id"])
+        background.add_task(*notify.rfq_dispatched(provider.company.contact_email, rfq.reference, lane_of(rfq), rfq.mode))
     if rfq.status == RFQStatus.qualified:
         rfq.status = RFQStatus.dispatched
         rfq.dispatched_at = datetime.now(timezone.utc)
@@ -155,36 +156,16 @@ def dispatch_rfq(rfq_id: int, provider_ids: list[int] | None = None, db: Session
 def rfq_dispatches(rfq_id: int, db: Session = Depends(get_db), _: User = Depends(staff)):
     rfq = get_rfq(db, rfq_id)
     return [{"provider_id": d.provider_id, "company": d.provider.company.legal_name, "match_score": d.match_score,
-             "sent_at": d.sent_at, "responded_at": d.responded_at} for d in rfq.dispatches]
+             "sent_at": d.sent_at, "responded_at": d.responded_at, "declined_at": d.declined_at,
+             "decline_reason": d.decline_reason} for d in rfq.dispatches]
 
 
 @router.post("/{rfq_id}/quotes", response_model=QuoteOut, status_code=201)
 def add_quote(rfq_id: int, body: QuoteIn, db: Session = Depends(get_db), user: User = Depends(staff)):
-    """Quote capture. In the MVP Ops enters quotes received by email/WhatsApp (or via the AI parser)."""
-    rfq = get_rfq(db, rfq_id)
-    if rfq.status not in (RFQStatus.dispatched, RFQStatus.quoted):
-        raise HTTPException(409, f"RFQ is {rfq.status}; quotes are accepted only after dispatch")
-    dispatch = next((d for d in rfq.dispatches if d.provider_id == body.provider_id), None)
-    if not dispatch:
-        raise HTTPException(422, "This provider was not dispatched for this RFQ")
-    if any(q.provider_id == body.provider_id and q.status == "submitted" for q in rfq.quotes):
-        raise HTTPException(409, "Provider already has an active quote; reject it first to requote")
-    charges = normalize_charges([c.model_dump() for c in body.charges])
-    completeness = quote_completeness(charges, body.transit_days, body.valid_until, body.exclusions)
-    quote = Quote(rfq_id=rfq.id, provider_id=body.provider_id, currency=body.currency.upper(), charges=charges,
-                  total=round(sum(c["amount"] for c in charges), 2), transit_days=body.transit_days,
-                  valid_until=body.valid_until, exclusions=body.exclusions, completeness=completeness)
-    db.add(quote)
-    provider = db.get(Provider, body.provider_id)
-    now = datetime.now(timezone.utc)
-    if dispatch.responded_at is None:
-        dispatch.responded_at = now
-        provider.total_response_hours += (now - _utc(dispatch.sent_at)).total_seconds() / 3600
-        provider.quotes_submitted += 1
-        provider.completeness_sum += completeness
-    rfq.status = RFQStatus.quoted
-    db.flush()
-    audit.log(db, user.email, "quote.create", "quote", quote.id, {"rfq_id": rfq.id, "total": quote.total})
+    """Quote capture by Ops for quotes received by email/WhatsApp. Providers can also quote in the portal."""
+    quote = submit_quote(db, get_rfq(db, rfq_id), body.provider_id, currency=body.currency,
+                         charges=[c.model_dump() for c in body.charges], transit_days=body.transit_days,
+                         valid_until=body.valid_until, exclusions=body.exclusions, actor=user.email, via="ops")
     db.commit()
     return quote
 
@@ -208,7 +189,8 @@ def compare_quotes(rfq_id: int, db: Session = Depends(get_db), _: User = Depends
 
 
 @router.post("/{rfq_id}/book", response_model=BookingOut, status_code=201)
-def book(rfq_id: int, body: BookingIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def book(rfq_id: int, body: BookingIn, background: BackgroundTasks, db: Session = Depends(get_db),
+         user: User = Depends(staff)):
     rfq = get_rfq(db, rfq_id)
     if rfq.status != RFQStatus.quoted:
         raise HTTPException(409, f"RFQ is {rfq.status}; booking needs at least one quote")
@@ -231,6 +213,7 @@ def book(rfq_id: int, body: BookingIn, db: Session = Depends(get_db), user: User
     audit.log(db, user.email, "booking.create", "booking", booking.id,
               {"rfq_id": rfq.id, "quote_id": quote.id, "fee": body.platform_fee})
     db.commit()
+    background.add_task(*notify.quote_won(quote.provider.company.contact_email, rfq.reference))
     return booking
 
 

@@ -23,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/#rfq">درخواست قیمت</Link>
               <Link href="/#calculator">ماشین‌حساب</Link>
               <Link href="/#track">پیگیری</Link>
+              <Link href="/portal">شرکت‌های حمل</Link>
               <Link href="/ops">پنل عملیات</Link>
             </nav>
           </div>

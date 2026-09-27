@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import Login from "@/components/Login";
@@ -43,16 +44,20 @@ export default function OpsPage() {
     }
   }, [status]);
 
-  useEffect(() => { if (me) load(); }, [me, load]);
+  useEffect(() => {
+    if (me?.role === "provider") router.replace("/portal");
+    else if (me) load();
+  }, [me, load, router]);
 
   if (!ready) return null;
   if (!me) return <main className="container"><Login onLogin={login} /></main>;
+  if (me.role === "provider") return null;
 
   return (
     <main className="container" style={{ paddingTop: 24 }}>
       <div className="row" style={{ justifyContent: "space-between" }}>
         <h1 style={{ margin: 0, fontSize: 24 }}>پنل عملیات</h1>
-        <div className="row"><span className="muted ltr">{me.email}</span><button className="secondary" onClick={logout}>خروج</button></div>
+        <div className="row"><span className="muted ltr">{me.email}</span><Link href="/account">تغییر رمز</Link><button className="secondary" onClick={logout}>خروج</button></div>
       </div>
 
       {kpis && (
@@ -134,6 +139,18 @@ function Providers({ providers, onChange, isAdmin }: { providers: Provider[]; on
     }
   }
 
+  async function portalUser(p: Provider) {
+    const email = prompt(`ایمیل ورود پورتال برای ${p.legal_name}`);
+    if (!email) return;
+    const password = Array.from(crypto.getRandomValues(new Uint8Array(9)), (b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
+    try {
+      await api(`/api/providers/${p.id}/users`, { auth: true, body: { email, password } });
+      prompt("دسترسی ساخته شد. این رمز موقت را به شرکت بدهید (فقط همین یک‌بار نمایش داده می‌شود):", password);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
   async function patch(id: number, body: object) {
     try {
       await api(`/api/providers/${id}`, { method: "PATCH", auth: true, body });
@@ -163,6 +180,7 @@ function Providers({ providers, onChange, isAdmin }: { providers: Provider[]; on
                   </td>
                   <td className="row">
                     {!p.verified && <button className="secondary" onClick={() => patch(p.id, { verified: true })}>تأیید</button>}
+                    <button className="secondary" onClick={() => portalUser(p)}>دسترسی پورتال</button>
                     {isAdmin && <button className={p.suspended ? "secondary" : "danger"} onClick={() => patch(p.id, { suspended: !p.suspended })}>{p.suspended ? "رفع تعلیق" : "تعلیق"}</button>}
                   </td>
                 </tr>

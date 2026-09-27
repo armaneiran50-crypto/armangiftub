@@ -3,9 +3,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ..db import get_db
-from ..models import Company, Provider, User
-from ..schemas import ProviderIn, ProviderOut, ProviderUpdate
-from ..security import admin_only, staff
+from ..models import Company, Provider, Role, User
+from ..schemas import ProviderIn, ProviderOut, ProviderUpdate, ProviderUserIn
+from ..security import admin_only, hash_password, staff
 from ..services import audit
 from ..services.scoring import provider_score
 
@@ -57,3 +57,30 @@ def update_provider(provider_id: int, body: ProviderUpdate, db: Session = Depend
     audit.log(db, user.email, "provider.update", "provider", p.id, changes)
     db.commit()
     return to_out(p)
+
+
+@router.get("/{provider_id}/users")
+def provider_users(provider_id: int, db: Session = Depends(get_db), _: User = Depends(staff)):
+    p = db.get(Provider, provider_id)
+    if not p:
+        raise HTTPException(404, "Provider not found")
+    users = db.scalars(select(User).where(User.company_id == p.company_id)).all()
+    return [{"id": u.id, "email": u.email, "is_active": u.is_active} for u in users]
+
+
+@router.post("/{provider_id}/users", status_code=201)
+def create_provider_user(provider_id: int, body: ProviderUserIn, db: Session = Depends(get_db),
+                         user: User = Depends(staff)):
+    """Create a portal login for a provider. Share the initial password with them out of band."""
+    p = db.get(Provider, provider_id)
+    if not p:
+        raise HTTPException(404, "Provider not found")
+    email = body.email.lower()
+    if db.scalar(select(User).where(User.email == email)):
+        raise HTTPException(409, "Email already registered")
+    u = User(email=email, password_hash=hash_password(body.password), role=Role.provider, company_id=p.company_id)
+    db.add(u)
+    db.flush()
+    audit.log(db, user.email, "provider.user.create", "provider", p.id, {"user_id": u.id, "email": email})
+    db.commit()
+    return {"id": u.id, "email": u.email}

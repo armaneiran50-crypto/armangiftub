@@ -16,15 +16,22 @@ MVP پلتفرم بر اساس «نقشه اجرایی جامع پلتفرم ه�
 | §16 CRM | مراحل وضعیت RFQ و امتیاز لید |
 | §17 Compliance | RFQهای مربوط به حوزه‌های قضایی حساس یا کالای کنترل‌شده متوقف می‌شوند تا مدیر تصمیم بگیرد؛ DG فقط به شرکت‌های دارای مجوز |
 | §18 RACI | تعلیق Provider و تصمیم انطباق فقط با نقش admin؛ همه اقدامات در Audit log |
+| §7 ضد دور زدن | پورتال شرکت‌های حمل (`/portal`): فقط درخواست‌های ارسال‌شده به همان شرکت، بدون نام و اطلاعات تماس صاحب کالا؛ ایمیل، تلفن و لینک در توضیحات خودکار مخفی می‌شوند |
+| §13 عملیات شرکا | شرکت‌ها خودشان قیمت می‌دهند یا با ذکر دلیل انصراف می‌دهند؛ امتیاز و آمار خود را می‌بینند؛ حساب تعلیق‌شده وارد نمی‌شود |
+| اطلاع‌رسانی | ایمیل به مشتری (ثبت درخواست)، به شرکت (درخواست جدید، برنده شدن) — از طریق SMTP |
 | §21 KPI | Quote Coverage، نرخ پاسخ، زمان تا اولین Quote، نرخ تبدیل، درآمد |
 
-خارج از این نسخه (طبق سند): پرداخت/Escrow، اتصال WhatsApp و ایمیل، پورتال Provider، Tracking API، صفحات SEO.
+خارج از این نسخه (طبق سند): پرداخت/Escrow، اتصال WhatsApp، Tracking API، صفحات SEO.
+
+### راه‌اندازی شرکت‌های حمل در پورتال
+در پنل عملیات ← «شرکت‌های حمل» ← دکمه «دسترسی پورتال»، ایمیل شرکت را وارد کنید. یک رمز موقت نمایش داده می‌شود
+که باید به شرکت بدهید؛ شرکت با آن در `/portal` وارد می‌شود و از صفحه «تغییر رمز» (`/account`) رمز را عوض می‌کند.
 
 ## ساختار
 
 ```
 backend/    FastAPI + SQLAlchemy (PostgreSQL در production، SQLite برای توسعه)
-frontend/   Next.js فارسی و راست‌چین: صفحه اصلی، فرم RFQ، ماشین‌حساب، پیگیری، پنل عملیات (/ops)
+frontend/   Next.js فارسی و راست‌چین: صفحه اصلی، فرم RFQ، ماشین‌حساب، پیگیری، پنل عملیات (/ops)، پورتال شرکت‌ها (/portal)
 docker-compose.yml + Caddyfile   اجرای کامل با HTTPS خودکار
 ```
 
@@ -54,6 +61,14 @@ docker compose up -d --build
 به‌روزرسانی: `git pull && docker compose up -d --build`
 پشتیبان دیتابیس: `docker compose exec db pg_dump -U logirad logirad > backup.sql`
 
+### ایمیل (اختیاری)
+مقادیر `LOGIRAD_SMTP_*` را در `.env` وارد کنید (مثلاً SMTP سرویس ایمیل شرکت یا Amazon SES / Mailgun).
+بدون SMTP، ایمیل‌ها فقط در لاگ backend ثبت می‌شوند.
+
+### دیتابیس و migration
+ساختار دیتابیس با Alembic مدیریت می‌شود و هنگام اجرای backend خودکار به آخرین نسخه ارتقا پیدا می‌کند؛
+پس برای به‌روزرسانی فقط `git pull && docker compose up -d --build` کافی است.
+
 ### فعال‌سازی هوش مصنوعی (اختیاری)
 در `.env` مقدار `LOGIRAD_AI_ENABLED=true` و `ANTHROPIC_API_KEY` را تنظیم کنید. دکمه «پر کردن خودکار با هوش مصنوعی»
 متن مشتری را به فرم تبدیل می‌کند؛ هیچ RFQی بدون تأیید مشتری ثبت یا ارسال نمی‌شود.
@@ -64,7 +79,9 @@ docker compose up -d --build
 # backend
 cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/uvicorn app.main:app --reload          # http://localhost:8000/docs
-.venv/bin/python -m pytest                        # تست‌ها
+.venv/bin/python -m pytest                        # تست‌ها (SQLite)
+LOGIRAD_TEST_DATABASE_URL=postgresql+psycopg://... .venv/bin/python -m pytest   # روی PostgreSQL
+.venv/bin/alembic revision --autogenerate -m "..."  # بعد از تغییر مدل‌ها
 
 # frontend (در ترمینال دیگر)
 cd frontend && npm install && npm run dev         # http://localhost:3000
@@ -88,5 +105,9 @@ cd frontend && npm install && npm run dev         # http://localhost:3000
 | GET/POST/PATCH | `/api/providers` | ops/admin (تعلیق فقط admin) |
 | POST | `/api/bookings/{id}/milestones` | ops/admin |
 | GET | `/api/kpis`, `/api/audit` | ops/admin |
+| POST | `/api/providers/{id}/users` | ops/admin — ساخت دسترسی پورتال |
+| GET | `/api/portal/me`, `/api/portal/rfqs`, `/api/portal/rfqs/{id}` | provider |
+| POST | `/api/portal/rfqs/{id}/quote` · `/decline` | provider |
+| POST | `/api/auth/password` | همه کاربران — تغییر رمز |
 
 مستندات کامل تعاملی: `/docs` روی backend.
