@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { useAiEnabled } from "@/lib/useConfig";
 import { CARGO_CLASSES, COUNTRIES, FIELDS, MODES, STATUSES } from "@/lib/labels";
 
 type Form = Record<string, string>;
@@ -33,6 +34,7 @@ export default function RFQForm({ initial }: { initial?: Partial<Form> } = {}) {
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [aiText, setAiText] = useState("");
+  const aiEnabled = useAiEnabled();
   const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "warn" | "err"; text: string } | null>(null);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -98,7 +100,7 @@ export default function RFQForm({ initial }: { initial?: Partial<Form> } = {}) {
       <h2>درخواست قیمت حمل</h2>
       <p className="sub">ثبت درخواست رایگان است. پیشنهادهای قابل مقایسه از شرکت‌های حمل معتبر دریافت می‌کنید.</p>
 
-      <div className="result">
+      {aiEnabled && <div className="result">
         <label htmlFor="ai">یا درخواستتان را آزاد بنویسید تا فرم خودکار پر شود (فارسی یا انگلیسی)</label>
         <textarea id="ai" rows={3} value={aiText} onChange={(e) => setAiText(e.target.value)}
           placeholder="مثلاً: دو کانتینر ۴۰ فوت مبلمان از شانگهای به جبل علی، حدود ۲۰ تن، آماده حمل اول آذر" />
@@ -106,7 +108,7 @@ export default function RFQForm({ initial }: { initial?: Partial<Form> } = {}) {
           <button type="button" className="secondary" disabled={busy || aiText.trim().length < 10} onClick={aiFill}>پر کردن خودکار با هوش مصنوعی</button>
         </div>
         {aiMsg && <div className={`alert ${aiMsg.kind}`}>{aiMsg.text}</div>}
-      </div>
+      </div>}
 
       <h3>مسیر و بار</h3>
       <div className="grid">

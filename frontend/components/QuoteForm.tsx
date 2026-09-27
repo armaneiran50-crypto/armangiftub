@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { api } from "@/lib/api";
 
 type Line = { name: string; amount: string; category: string };
 export type QuotePayload = {
@@ -14,10 +15,17 @@ export type QuotePayload = {
 const firstLine = (): Line => ({ name: "Ocean freight", amount: "", category: "freight" });
 
 /** Charge-line quote form shared by the Ops desk and the provider portal. */
-export default function QuoteForm({ onSubmit, header, submitLabel = "ثبت پیشنهاد" }: {
+type Draft = {
+  currency: string; charges: { name: string; amount: number; category: string }[]; transit_days: number | null;
+  valid_until: string | null; exclusions: string | null; stated_total: number | null; warnings: string[];
+};
+
+export default function QuoteForm({ onSubmit, header, submitLabel = "ثبت پیشنهاد", parseUrl }: {
   onSubmit: (q: QuotePayload) => Promise<boolean>;
   header?: React.ReactNode;
   submitLabel?: string;
+  /** Endpoint of the AI quote parser; when set, a "read quote" panel is shown. */
+  parseUrl?: string;
 }) {
   const [lines, setLines] = useState<Line[]>([firstLine()]);
   const [f, setF] = useState({ currency: "USD", transit_days: "", valid_until: "", exclusions: "" });
@@ -41,9 +49,49 @@ export default function QuoteForm({ onSubmit, header, submitLabel = "ثبت پی
     }
   }
 
+  const [aiText, setAiText] = useState("");
+  const [aiFile, setAiFile] = useState<File | null>(null);
+  const [aiMsg, setAiMsg] = useState<{ kind: "ok" | "warn" | "err"; text: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+
+  async function readQuote() {
+    if (!parseUrl) return;
+    setAiBusy(true);
+    setAiMsg(null);
+    const form = new FormData();
+    if (aiText.trim()) form.append("text", aiText);
+    if (aiFile) form.append("file", aiFile);
+    try {
+      const d = await api<Draft>(parseUrl, { auth: true, form, method: "POST" });
+      setLines(d.charges.length ? d.charges.map((c) => ({ name: c.name, amount: String(c.amount), category: c.category })) : [firstLine()]);
+      setF({ currency: d.currency || "USD", transit_days: d.transit_days ? String(d.transit_days) : "",
+             valid_until: d.valid_until || "", exclusions: d.exclusions || "" });
+      setAiMsg(d.warnings.length
+        ? { kind: "warn", text: "فرم پر شد؛ پیش از ثبت بررسی کنید: " + d.warnings.join(" • ") }
+        : { kind: "ok", text: "فرم از روی قیمت پر شد؛ لطفاً ردیف‌ها را بررسی و سپس ثبت کنید." });
+    } catch (err) {
+      setAiMsg({ kind: "err", text: (err as Error).message });
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
   const total = lines.reduce((s, l) => s + (Number(l.amount) || 0), 0);
   return (
     <form onSubmit={submit}>
+      {parseUrl && (
+        <div className="result" style={{ marginBottom: 16 }}>
+          <label>خواندن خودکار قیمت با هوش مصنوعی: متن ایمیل/واتس‌اپ را بچسبانید یا PDF قیمت را انتخاب کنید</label>
+          <textarea rows={3} value={aiText} onChange={(e) => setAiText(e.target.value)} placeholder="O/F USD 1,850/40HC, THC 180, DTHC 260, T/T 22 days, valid till 31 Dec…" dir="auto" />
+          <div className="row" style={{ marginTop: 8 }}>
+            <input type="file" accept="application/pdf" style={{ flex: 1, minWidth: 180 }} onChange={(e) => setAiFile(e.target.files?.[0] || null)} />
+            <button type="button" className="secondary" disabled={aiBusy || (!aiText.trim() && !aiFile)} onClick={readQuote}>
+              {aiBusy ? "در حال خواندن…" : "خواندن و پر کردن فرم"}
+            </button>
+          </div>
+          {aiMsg && <div className={`alert ${aiMsg.kind}`}>{aiMsg.text}</div>}
+        </div>
+      )}
       <div className="grid">
         {header}
         <div><label>ارز</label><input dir="ltr" maxLength={3} value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value.toUpperCase() })} /></div>

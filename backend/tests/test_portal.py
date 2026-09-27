@@ -1,13 +1,7 @@
 from app.services import notify
 from tests.conftest import GOOD_RFQ
+from tests.portal_helpers import provider_login
 from tests.test_flow import make_provider
-
-
-def provider_login(client, admin, provider_id, email):
-    r = client.post(f"/api/providers/{provider_id}/users", headers=admin, json={"email": email, "password": "portal-pass-1"})
-    assert r.status_code == 201, r.text
-    tok = client.post("/api/auth/login", data={"username": email, "password": "portal-pass-1"}).json()["access_token"]
-    return {"Authorization": f"Bearer {tok}"}
 
 
 def setup(client, admin, notes="Call me at +971 50 123 4567 or ali@example.com"):

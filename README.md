@@ -9,6 +9,7 @@ MVP پلتفرم بر اساس «نقشه اجرایی جامع پلتفرم ه�
 |---|---|
 | §8 جریان End-to-End | ثبت RFQ ← ارزیابی ← Matching ← Dispatch ← ثبت Quote ← مقایسه ← Booking ← Milestone/POD |
 | §10 AI Intake Agent | تبدیل متن آزاد (فارسی/انگلیسی) به پیش‌نویس RFQ با Claude؛ خروجی ساختاریافته و فقط «پیش‌نویس» |
+| §10 Quote Parser | خواندن قیمت شرکت‌ها از متن ایمیل/واتس‌اپ یا PDF و تبدیل به ردیف‌های هزینه دسته‌بندی‌شده؛ بررسی جمع با جمع ذکرشده در سند؛ فقط فرم را پر می‌کند و تا تأیید انسان ذخیره نمی‌شود (در پنل عملیات و پورتال شرکت‌ها) |
 | §11 مدل داده | Company، User، Provider، RFQ، Dispatch، Quote، Booking، AuditEvent |
 | §12 استاندارد خدمت | درصد کامل بودن RFQ، بررسی اعتبار Quote پیش از رزرو، ثبت استثناها |
 | §13 امتیاز Provider | وزن‌ها: ۲۵٪ زمان پاسخ، ۲۰٪ کامل بودن، ۲۰٪ قیمت، ۱۵٪ موفقیت رزرو، ۱۰٪ استثنا، ۱۰٪ انطباق |
@@ -87,8 +88,12 @@ docker compose up -d --build
 پس برای به‌روزرسانی فقط `git pull && docker compose up -d --build` کافی است.
 
 ### فعال‌سازی هوش مصنوعی (اختیاری)
-در `.env` مقدار `LOGIRAD_AI_ENABLED=true` و `ANTHROPIC_API_KEY` را تنظیم کنید. دکمه «پر کردن خودکار با هوش مصنوعی»
-متن مشتری را به فرم تبدیل می‌کند؛ هیچ RFQی بدون تأیید مشتری ثبت یا ارسال نمی‌شود.
+در `.env` مقدار `LOGIRAD_AI_ENABLED=true` و `ANTHROPIC_API_KEY` را تنظیم کنید. با فعال شدن:
+- دکمه «پر کردن خودکار با هوش مصنوعی» در فرم درخواست ظاهر می‌شود (هیچ RFQی بدون تأیید مشتری ثبت نمی‌شود)؛
+- ربات واتس‌اپ پیام آزاد مشتری را با AI می‌خواند؛
+- پنل «خواندن خودکار قیمت» در ثبت قیمت (پنل عملیات و پورتال) فعال می‌شود.
+
+مصرف توکن هر فراخوانی در Audit log ثبت می‌شود. بدون کلید، این قابلیت‌ها پنهان می‌مانند و بقیه سیستم عادی کار می‌کند.
 
 ## توسعه محلی
 
@@ -126,6 +131,8 @@ cd frontend && npm install && npm run dev         # http://localhost:3000
 | GET | `/api/portal/me`, `/api/portal/rfqs`, `/api/portal/rfqs/{id}` | provider |
 | POST | `/api/portal/rfqs/{id}/quote` · `/decline` | provider |
 | POST | `/api/auth/password` | همه کاربران — تغییر رمز |
+| POST | `/api/rfqs/{id}/quotes/parse` · `/api/portal/rfqs/{id}/quote/parse` | ops/admin · provider — خواندن قیمت با AI (متن یا PDF) |
+| GET | `/api/lanes/{origin}/{dest}` | عمومی — داده تجمیعی مسیر |
 | GET/POST | `/api/whatsapp/webhook` | Meta (با امضای X-Hub-Signature-256) |
 | GET/POST/PATCH | `/api/whatsapp/conversations…` | ops/admin — صندوق گفتگو |
 

@@ -10,6 +10,7 @@ import anthropic
 from pydantic import BaseModel, Field
 
 from ..config import get_settings
+from .client import get_client
 
 SYSTEM = """You extract international freight shipping requests into a structured RFQ.
 Input may be in Persian, Arabic or English. Rules:
@@ -49,22 +50,12 @@ class IntakeUnavailable(Exception):
     pass
 
 
-_client: anthropic.Anthropic | None = None
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic()
-    return _client
-
-
 def extract(text: str) -> tuple[RFQDraft, dict]:
     settings = get_settings()
     if not settings.ai_enabled:
         raise IntakeUnavailable("AI intake is disabled (set LOGIRAD_AI_ENABLED=true and ANTHROPIC_API_KEY).")
     try:
-        response = _get_client().beta.messages.parse(
+        response = get_client().beta.messages.parse(
             model=settings.ai_model,
             max_tokens=4000,
             system=SYSTEM,

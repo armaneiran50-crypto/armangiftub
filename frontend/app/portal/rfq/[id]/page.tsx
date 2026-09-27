@@ -7,6 +7,7 @@ import Login from "@/components/Login";
 import QuoteForm from "@/components/QuoteForm";
 import { api } from "@/lib/api";
 import { CARGO_CLASSES, fa, MODES } from "@/lib/labels";
+import { useAiEnabled } from "@/lib/useConfig";
 import { useAuth } from "@/lib/useAuth";
 import { PORTAL_STATES, type PortalRFQ } from "@/lib/portal";
 
@@ -22,6 +23,7 @@ export default function PortalRFQ() {
   const [d, setD] = useState<Detail | null>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [reason, setReason] = useState("");
+  const aiEnabled = useAiEnabled();
 
   const load = useCallback(() => api<Detail>(`/api/portal/rfqs/${id}`, { auth: true }).then(setD)
     .catch((e) => setMsg({ kind: "err", text: (e as Error).message })), [id]);
@@ -94,7 +96,7 @@ export default function PortalRFQ() {
           <div className="card">
             <h2>ارسال قیمت</h2>
             <p className="sub">هزینه‌ها را به تفکیک وارد کنید؛ قیمت‌های کامل‌تر و سریع‌تر امتیاز بیشتری می‌گیرند.</p>
-            <QuoteForm submitLabel="ارسال قیمت" onSubmit={(q) => act(() => api(`/api/portal/rfqs/${id}/quote`, { auth: true, body: q }), "قیمت شما ارسال شد.")} />
+            <QuoteForm submitLabel="ارسال قیمت" parseUrl={aiEnabled ? `/api/portal/rfqs/${id}/quote/parse` : undefined} onSubmit={(q) => act(() => api(`/api/portal/rfqs/${id}/quote`, { auth: true, body: q }), "قیمت شما ارسال شد.")} />
           </div>
           <div className="card">
             <h2>انصراف از این درخواست</h2>

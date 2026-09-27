@@ -7,6 +7,7 @@ import Login from "@/components/Login";
 import QuoteForm from "@/components/QuoteForm";
 import { api } from "@/lib/api";
 import { CARGO_CLASSES, countryName, fa, FIELDS, LABELS, MODES, STATUSES } from "@/lib/labels";
+import { useAiEnabled } from "@/lib/useConfig";
 import { useAuth } from "@/lib/useAuth";
 
 type RFQ = Record<string, unknown> & {
@@ -147,7 +148,7 @@ export default function RFQDetail() {
       )}
 
       {["dispatched", "quoted"].includes(s) && dispatches.length > 0 && (
-        <QuoteEntry dispatches={dispatches} onSubmit={(body) => act(() => api(`/api/rfqs/${id}/quotes`, { auth: true, body }), "پیشنهاد قیمت ثبت شد.")} />
+        <QuoteEntry rfqId={id} dispatches={dispatches} onSubmit={(body) => act(() => api(`/api/rfqs/${id}/quotes`, { auth: true, body }), "پیشنهاد قیمت ثبت شد.")} />
       )}
 
       {cmp && cmp.quotes.length > 0 && (
@@ -215,14 +216,15 @@ function Compliance({ isAdmin, onDecide }: { isAdmin: boolean; onDecide: (d: "re
   );
 }
 
-function QuoteEntry({ dispatches, onSubmit }: { dispatches: Dispatch[]; onSubmit: (body: object) => Promise<boolean> }) {
+function QuoteEntry({ rfqId, dispatches, onSubmit }: { rfqId: string; dispatches: Dispatch[]; onSubmit: (body: object) => Promise<boolean> }) {
   const open = dispatches.filter((d) => !d.declined_at);
+  const aiEnabled = useAiEnabled();
   const [provider, setProvider] = useState<number>((open.find((d) => !d.responded_at) || open[0] || dispatches[0]).provider_id);
   return (
     <div className="card">
       <h2>ثبت پیشنهاد قیمت دریافتی</h2>
       <p className="sub">پیشنهادهایی که از ایمیل یا واتس‌اپ می‌رسند را اینجا وارد کنید؛ شرکت‌ها می‌توانند خودشان هم از پورتال قیمت بدهند.</p>
-      <QuoteForm onSubmit={(q) => onSubmit({ ...q, provider_id: provider })} header={
+      <QuoteForm parseUrl={aiEnabled ? `/api/rfqs/${rfqId}/quotes/parse` : undefined} onSubmit={(q) => onSubmit({ ...q, provider_id: provider })} header={
         <div><label>شرکت</label>
           <select value={provider} onChange={(e) => setProvider(Number(e.target.value))}>
             {dispatches.map((d) => <option key={d.provider_id} value={d.provider_id}>

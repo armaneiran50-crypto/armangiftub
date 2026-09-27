@@ -31,12 +31,13 @@ function errorMessage(body: unknown, status: number): string {
   return `خطای ${status}`;
 }
 
-export async function api<T = unknown>(path: string, options: { method?: string; body?: unknown; auth?: boolean; form?: URLSearchParams } = {}): Promise<T> {
+export async function api<T = unknown>(path: string, options: { method?: string; body?: unknown; auth?: boolean; form?: URLSearchParams | FormData } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   let body: BodyInit | undefined;
   if (options.form) {
     body = options.form;
-    headers["Content-Type"] = "application/x-www-form-urlencoded";
+    // FormData sets its own multipart boundary header
+    if (options.form instanceof URLSearchParams) headers["Content-Type"] = "application/x-www-form-urlencoded";
   } else if (options.body !== undefined) {
     body = JSON.stringify(options.body);
     headers["Content-Type"] = "application/json";
