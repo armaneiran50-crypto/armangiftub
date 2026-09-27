@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/useAuth";
 type RFQ = {
   id: number; reference: string; status: string; origin_country: string | null; destination_country: string | null;
   mode: string | null; commodity: string | null; lead_score: number; completeness: number; flags: string[]; created_at: string;
-  company_name: string | null;
+  company_name: string | null; source: string;
 };
 type Provider = {
   id: number; legal_name: string; country: string; lanes: string[]; modes: string[]; cargo_classes: string[];
@@ -75,6 +75,7 @@ export default function OpsPage() {
       <div className="tabs">
         <button className={tab === "rfqs" ? "active" : ""} onClick={() => setTab("rfqs")}>درخواست‌ها</button>
         <button className={tab === "providers" ? "active" : ""} onClick={() => setTab("providers")}>شرکت‌های حمل</button>
+        <button onClick={() => router.push("/ops/whatsapp")}>گفتگوهای واتس‌اپ</button>
       </div>
 
       {tab === "rfqs" ? (
@@ -93,7 +94,7 @@ export default function OpsPage() {
               <tbody>
                 {rfqs.map((r) => (
                   <tr key={r.id} className="clickable" onClick={() => router.push(`/ops/rfq/${r.id}`)}>
-                    <td className="ltr">{r.reference}</td>
+                    <td className="ltr">{r.reference}{r.source === "whatsapp" && <div><span className="badge ok">WhatsApp</span></div>}</td>
                     <td>{countryName(r.origin_country)} ← {countryName(r.destination_country)}</td>
                     <td>{r.mode ? MODES[r.mode] : "—"}</td>
                     <td>{r.commodity || "—"}{r.company_name ? <div className="muted">{r.company_name}</div> : null}</td>

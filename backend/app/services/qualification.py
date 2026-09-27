@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from ..models import RFQ, Mode, RFQStatus
 
-REQUIRED_FIELDS = ["origin_country", "destination_country", "mode", "commodity", "weight_kg", "ready_date", "contact_email"]
+REQUIRED_FIELDS = ["origin_country", "destination_country", "mode", "commodity", "weight_kg", "ready_date", "contact"]
 MODE_FIELDS = {
     Mode.ocean_fcl: ["containers"],
     Mode.ocean_lcl: ["volume_cbm"],
@@ -37,14 +37,21 @@ class Qualification:
     status: RFQStatus = RFQStatus.started
 
 
+def _value(rfq: RFQ, name: str):
+    # A request is reachable by email or phone/WhatsApp.
+    if name == "contact":
+        return rfq.contact_email or rfq.contact_phone
+    return getattr(rfq, name)
+
+
 def _text(rfq: RFQ) -> str:
     return " ".join(filter(None, [rfq.commodity, rfq.notes, rfq.cargo_class])).lower()
 
 
 def qualify(rfq: RFQ) -> Qualification:
     required = REQUIRED_FIELDS + MODE_FIELDS.get(rfq.mode, []) if rfq.mode else REQUIRED_FIELDS
-    missing = [f for f in required if getattr(rfq, f) in (None, "")]
-    optional_present = sum(1 for f in OPTIONAL_FIELDS if getattr(rfq, f) not in (None, ""))
+    missing = [f for f in required if _value(rfq, f) in (None, "")]
+    optional_present = sum(1 for f in OPTIONAL_FIELDS if _value(rfq, f) not in (None, ""))
     completeness = round(0.85 * (1 - len(missing) / len(required)) + 0.15 * optional_present / len(OPTIONAL_FIELDS), 3)
 
     flags: list[str] = []

@@ -26,7 +26,7 @@ def test_incomplete_rfq_lists_missing_fields(client):
     r = client.post("/api/rfqs", json={"origin_country": "CN", "mode": "air", "commodity": "shoes"})
     body = r.json()
     assert body["status"] == "started"
-    assert {"destination_country", "weight_kg", "volume_cbm", "contact_email"} <= set(body["missing_fields"])
+    assert {"destination_country", "weight_kg", "volume_cbm", "contact"} <= set(body["missing_fields"])
 
 
 def test_restricted_jurisdiction_goes_to_compliance_hold_and_blocks_dispatch(client, admin):

@@ -6,7 +6,7 @@ details withheld: the relationship and the transaction stay on the platform.
 import re
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -114,12 +114,13 @@ def read_rfq(rfq_id: int, user: User = Depends(provider_user), db: Session = Dep
 
 
 @router.post("/rfqs/{rfq_id}/quote", response_model=QuoteOut, status_code=201)
-def quote(rfq_id: int, body: PortalQuoteIn, user: User = Depends(provider_user), db: Session = Depends(get_db)):
+def quote(rfq_id: int, body: PortalQuoteIn, background: BackgroundTasks, user: User = Depends(provider_user),
+          db: Session = Depends(get_db)):
     p = my_provider(user, db)
     d = my_dispatch(db, p, rfq_id)
     q = submit_quote(db, d.rfq, p.id, currency=body.currency, charges=[c.model_dump() for c in body.charges],
                      transit_days=body.transit_days, valid_until=body.valid_until,
-                     exclusions=redact(body.exclusions), actor=user.email, via="portal")
+                     exclusions=redact(body.exclusions), actor=user.email, via="portal", background=background)
     db.commit()
     return q
 

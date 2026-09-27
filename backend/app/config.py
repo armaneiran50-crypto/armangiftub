@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     admin_email: str = "admin@logirad.local"
     admin_password: str = "change-me"
 
+    # WhatsApp Business Cloud API (optional). Without a token, outbound messages are only logged.
+    whatsapp_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_verify_token: str = ""   # any random string, also entered in the Meta webhook settings
+    whatsapp_app_secret: str = ""     # Meta app secret, used to verify webhook signatures
+    whatsapp_display_number: str = ""  # public number shown on the site, e.g. 971500000000
+    whatsapp_graph_version: str = "v21.0"
+
     # AI (optional). The SDK reads ANTHROPIC_API_KEY itself.
     ai_enabled: bool = False
     ai_model: str = "claude-opus-5"

@@ -1,7 +1,7 @@
 """Quote submission shared by the Ops desk and the provider portal."""
 from datetime import datetime, timezone
 
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import RFQ, Provider, Quote, RFQStatus
@@ -15,7 +15,7 @@ def _utc(dt: datetime) -> datetime:
 
 def submit_quote(db: Session, rfq: RFQ, provider_id: int, *, currency: str, charges: list[dict],
                  transit_days: int | None, valid_until: str | None, exclusions: str | None,
-                 actor: str, via: str) -> Quote:
+                 actor: str, via: str, background: BackgroundTasks | None = None) -> Quote:
     if rfq.status not in (RFQStatus.dispatched, RFQStatus.quoted):
         raise HTTPException(409, f"RFQ is {rfq.status}; quotes are accepted only while it is open for quotes")
     dispatch = next((d for d in rfq.dispatches if d.provider_id == provider_id), None)
@@ -37,8 +37,16 @@ def submit_quote(db: Session, rfq: RFQ, provider_id: int, *, currency: str, char
         provider.total_response_hours += (now - _utc(dispatch.sent_at)).total_seconds() / 3600
         provider.quotes_submitted += 1
         provider.completeness_sum += completeness
+    first_quote = rfq.status == RFQStatus.dispatched
     rfq.status = RFQStatus.quoted
     db.flush()
+    if first_quote and background is not None:
+        from ..api.whatsapp import _deliver
+        from .whatsapp import notify_rfq_customer
+
+        queued = notify_rfq_customer(db, rfq, "quotes_ready")
+        if queued:
+            background.add_task(_deliver, db.get_bind(), *queued)
     audit.log(db, actor, "quote.create", "quote", quote.id, {"rfq_id": rfq.id, "total": quote.total, "via": via},
               source=via)
     return quote

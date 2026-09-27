@@ -161,11 +161,13 @@ def rfq_dispatches(rfq_id: int, db: Session = Depends(get_db), _: User = Depends
 
 
 @router.post("/{rfq_id}/quotes", response_model=QuoteOut, status_code=201)
-def add_quote(rfq_id: int, body: QuoteIn, db: Session = Depends(get_db), user: User = Depends(staff)):
+def add_quote(rfq_id: int, body: QuoteIn, background: BackgroundTasks, db: Session = Depends(get_db),
+              user: User = Depends(staff)):
     """Quote capture by Ops for quotes received by email/WhatsApp. Providers can also quote in the portal."""
     quote = submit_quote(db, get_rfq(db, rfq_id), body.provider_id, currency=body.currency,
                          charges=[c.model_dump() for c in body.charges], transit_days=body.transit_days,
-                         valid_until=body.valid_until, exclusions=body.exclusions, actor=user.email, via="ops")
+                         valid_until=body.valid_until, exclusions=body.exclusions, actor=user.email, via="ops",
+                         background=background)
     db.commit()
     return quote
 

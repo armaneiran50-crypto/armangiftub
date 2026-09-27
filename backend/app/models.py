@@ -195,3 +195,35 @@ class AuditEvent(Base):
     data: Mapped[dict] = mapped_column(JSON, default=dict)
     source: Mapped[str] = mapped_column(String(32), default="api")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class WAConversation(Base):
+    """A WhatsApp chat with one phone number (masterplan §14: WhatsApp = conversion + assisted intake)."""
+    __tablename__ = "wa_conversations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    wa_id: Mapped[str] = mapped_column(String(32), unique=True, index=True)  # sender phone in E.164 digits
+    name: Mapped[str | None] = mapped_column(String(255))
+    lang: Mapped[str] = mapped_column(String(2), default="fa")
+    state: Mapped[str] = mapped_column(String(32), default="idle")  # idle|collecting|confirming|handoff
+    draft: Mapped[dict] = mapped_column(JSON, default=dict)
+    rfq_id: Mapped[int | None] = mapped_column(ForeignKey("rfqs.id"))
+    needs_human: Mapped[bool] = mapped_column(Boolean, default=False)
+    last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, index=True)
+
+    messages: Mapped[list["WAMessage"]] = relationship(back_populates="conversation", order_by="WAMessage.id",
+                                                       cascade="all, delete-orphan")
+
+
+class WAMessage(Base):
+    __tablename__ = "wa_messages"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("wa_conversations.id"), index=True)
+    direction: Mapped[str] = mapped_column(String(3))  # in|out
+    body: Mapped[str] = mapped_column(Text)
+    wa_message_id: Mapped[str | None] = mapped_column(String(128), unique=True)
+    sender: Mapped[str] = mapped_column(String(64), default="bot")  # bot|customer|<ops email>
+    delivery: Mapped[str] = mapped_column(String(16), default="ok")  # ok|logged|failed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    conversation: Mapped[WAConversation] = relationship(back_populates="messages")

@@ -18,10 +18,11 @@ MVP پلتفرم بر اساس «نقشه اجرایی جامع پلتفرم ه�
 | §18 RACI | تعلیق Provider و تصمیم انطباق فقط با نقش admin؛ همه اقدامات در Audit log |
 | §7 ضد دور زدن | پورتال شرکت‌های حمل (`/portal`): فقط درخواست‌های ارسال‌شده به همان شرکت، بدون نام و اطلاعات تماس صاحب کالا؛ ایمیل، تلفن و لینک در توضیحات خودکار مخفی می‌شوند |
 | §13 عملیات شرکا | شرکت‌ها خودشان قیمت می‌دهند یا با ذکر دلیل انصراف می‌دهند؛ امتیاز و آمار خود را می‌بینند؛ حساب تعلیق‌شده وارد نمی‌شود |
+| §14 واتس‌اپ | ربات فارسی/انگلیسی که از گفتگو RFQ می‌سازد (پیام آزاد یا پرسش‌وپاسخ، تاریخ شمسی، تأیید نهایی)؛ صندوق گفتگو در پنل عملیات با پاسخ دستی، توقف ربات و ارجاع به کارشناس؛ اطلاع به مشتری وقتی قیمت می‌رسد؛ دکمه واتس‌اپ در سایت |
 | اطلاع‌رسانی | ایمیل به مشتری (ثبت درخواست)، به شرکت (درخواست جدید، برنده شدن) — از طریق SMTP |
 | §21 KPI | Quote Coverage، نرخ پاسخ، زمان تا اولین Quote، نرخ تبدیل، درآمد |
 
-خارج از این نسخه (طبق سند): پرداخت/Escrow، اتصال WhatsApp، Tracking API، صفحات SEO.
+خارج از این نسخه (طبق سند): پرداخت/Escrow، Tracking API.
 
 ### راه‌اندازی شرکت‌های حمل در پورتال
 در پنل عملیات ← «شرکت‌های حمل» ← دکمه «دسترسی پورتال»، ایمیل شرکت را وارد کنید. یک رمز موقت نمایش داده می‌شود
@@ -60,6 +61,17 @@ docker compose up -d --build
 
 به‌روزرسانی: `git pull && docker compose up -d --build`
 پشتیبان دیتابیس: `docker compose exec db pg_dump -U logirad logirad > backup.sql`
+
+### واتس‌اپ (اختیاری)
+۱. در [Meta for Developers](https://developers.facebook.com/) یک App از نوع Business بسازید و محصول WhatsApp را اضافه کنید.
+۲. شماره کسب‌وکار را اضافه کنید و یک **System User token** دائمی با دسترسی `whatsapp_business_messaging` بسازید.
+۳. در `.env` مقادیر `LOGIRAD_WHATSAPP_TOKEN`، `LOGIRAD_WHATSAPP_PHONE_NUMBER_ID`، `LOGIRAD_WHATSAPP_APP_SECRET` (از App Settings ← Basic)،
+   یک رشته تصادفی برای `LOGIRAD_WHATSAPP_VERIFY_TOKEN` و شماره عمومی برای `LOGIRAD_WHATSAPP_DISPLAY_NUMBER` را وارد کنید و `docker compose up -d` بزنید.
+۴. در تنظیمات Webhook واتس‌اپ، آدرس `https://DOMAIN/api/whatsapp/webhook` و همان Verify Token را وارد کنید و فیلد `messages` را Subscribe کنید.
+
+گفتگوها در پنل عملیات ← «گفتگوهای واتس‌اپ» دیده می‌شوند. مشتری با نوشتن «کارشناس» به اپراتور وصل می‌شود؛
+با «وضعیت» وضعیت آخرین درخواستش را می‌گیرد و با «جدید» از اول شروع می‌کند.
+طبق قوانین واتس‌اپ، پاسخ آزاد فقط تا ۲۴ ساعت بعد از آخرین پیام مشتری ممکن است.
 
 ### ایمیل (اختیاری)
 مقادیر `LOGIRAD_SMTP_*` را در `.env` وارد کنید (مثلاً SMTP سرویس ایمیل شرکت یا Amazon SES / Mailgun).
@@ -109,5 +121,7 @@ cd frontend && npm install && npm run dev         # http://localhost:3000
 | GET | `/api/portal/me`, `/api/portal/rfqs`, `/api/portal/rfqs/{id}` | provider |
 | POST | `/api/portal/rfqs/{id}/quote` · `/decline` | provider |
 | POST | `/api/auth/password` | همه کاربران — تغییر رمز |
+| GET/POST | `/api/whatsapp/webhook` | Meta (با امضای X-Hub-Signature-256) |
+| GET/POST/PATCH | `/api/whatsapp/conversations…` | ops/admin — صندوق گفتگو |
 
 مستندات کامل تعاملی: `/docs` روی backend.

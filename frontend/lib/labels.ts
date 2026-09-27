@@ -24,6 +24,7 @@ export const FIELDS: Record<string, string> = {
   weight_kg: "وزن",
   ready_date: "تاریخ آمادگی بار",
   contact_email: "ایمیل",
+  contact: "ایمیل یا شماره تماس",
   containers: "تعداد و نوع کانتینر",
   volume_cbm: "حجم (CBM)",
 };

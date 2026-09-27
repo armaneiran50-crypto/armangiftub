@@ -1,6 +1,7 @@
 import Calculator from "@/components/Calculator";
 import RFQForm from "@/components/RFQForm";
 import Track from "@/components/Track";
+import WhatsAppButton from "@/components/WhatsAppButton";
 
 const STEPS = [
   ["۱. یک درخواست", "مسیر، بار و زمان را یک‌بار ثبت کنید"],
@@ -26,6 +27,7 @@ export default function Home() {
           <Track />
         </div>
       </div>
+      <WhatsAppButton />
     </main>
   );
 }
