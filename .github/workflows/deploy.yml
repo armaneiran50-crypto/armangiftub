@@ -1,0 +1,106 @@
+# Deploys Logirad to your server over SSH.
+# Setup: GitHub repo → Settings → Secrets and variables → Actions → New repository secret:
+#   SERVER_HOST, SERVER_USER, SERVER_SSH_KEY (private key), DOMAIN, LOGIRAD_ADMIN_EMAIL, LOGIRAD_ADMIN_PASSWORD
+#   optional: SERVER_PORT, ANTHROPIC_API_KEY (+ LOGIRAD_AI_ENABLED=true), LOGIRAD_SMTP_*, LOGIRAD_WHATSAPP_*
+# Then run it from the Actions tab ("Deploy to server" → Run workflow). Pushes to main deploy automatically.
+name: Deploy to server
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SERVER_HOST: ${{ secrets.SERVER_HOST }}
+      SERVER_USER: ${{ secrets.SERVER_USER }}
+      SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
+      APP_DIR: /opt/logirad
+    steps:
+      - name: Check configuration
+        id: cfg
+        run: |
+          if [ -z "$SERVER_HOST" ] || [ -z "$SERVER_USER" ]; then
+            echo "::warning::SERVER_HOST / SERVER_USER secrets are not set; skipping deploy."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip != 'true'
+
+      - name: Set up SSH
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "$SERVER_PORT" -H "$SERVER_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          cat > ~/.ssh/config <<CFG
+          Host server
+            HostName $SERVER_HOST
+            User $SERVER_USER
+            Port $SERVER_PORT
+            IdentityFile ~/.ssh/id_deploy
+            ServerAliveInterval 30
+          CFG
+          ssh server 'echo connected as $(whoami) on $(hostname)'
+
+      - name: Upload code
+        if: steps.cfg.outputs.skip != 'true'
+        run: |
+          ssh server "SUDO=\$([ \$(id -u) -ne 0 ] && echo sudo); \$SUDO mkdir -p $APP_DIR && \$SUDO chown \$(id -u):\$(id -g) $APP_DIR"
+          tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=.venv --exclude='.env' -czf - . \
+            | ssh server "tar -xzf - -C $APP_DIR"
+
+      - name: Send settings
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+          LOGIRAD_ADMIN_EMAIL: ${{ secrets.LOGIRAD_ADMIN_EMAIL }}
+          LOGIRAD_ADMIN_PASSWORD: ${{ secrets.LOGIRAD_ADMIN_PASSWORD }}
+          LOGIRAD_AI_ENABLED: ${{ secrets.LOGIRAD_AI_ENABLED }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          LOGIRAD_SMTP_HOST: ${{ secrets.LOGIRAD_SMTP_HOST }}
+          LOGIRAD_SMTP_PORT: ${{ secrets.LOGIRAD_SMTP_PORT }}
+          LOGIRAD_SMTP_USER: ${{ secrets.LOGIRAD_SMTP_USER }}
+          LOGIRAD_SMTP_PASSWORD: ${{ secrets.LOGIRAD_SMTP_PASSWORD }}
+          LOGIRAD_SMTP_FROM: ${{ secrets.LOGIRAD_SMTP_FROM }}
+          LOGIRAD_WHATSAPP_TOKEN: ${{ secrets.LOGIRAD_WHATSAPP_TOKEN }}
+          LOGIRAD_WHATSAPP_PHONE_NUMBER_ID: ${{ secrets.LOGIRAD_WHATSAPP_PHONE_NUMBER_ID }}
+          LOGIRAD_WHATSAPP_VERIFY_TOKEN: ${{ secrets.LOGIRAD_WHATSAPP_VERIFY_TOKEN }}
+          LOGIRAD_WHATSAPP_APP_SECRET: ${{ secrets.LOGIRAD_WHATSAPP_APP_SECRET }}
+          LOGIRAD_WHATSAPP_DISPLAY_NUMBER: ${{ secrets.LOGIRAD_WHATSAPP_DISPLAY_NUMBER }}
+        run: |
+          # Written with single quotes so values are taken literally; the file is deleted on the server after use.
+          {
+            for k in DOMAIN LOGIRAD_ADMIN_EMAIL LOGIRAD_ADMIN_PASSWORD LOGIRAD_AI_ENABLED ANTHROPIC_API_KEY \
+                     LOGIRAD_SMTP_HOST LOGIRAD_SMTP_PORT LOGIRAD_SMTP_USER LOGIRAD_SMTP_PASSWORD LOGIRAD_SMTP_FROM \
+                     LOGIRAD_WHATSAPP_TOKEN LOGIRAD_WHATSAPP_PHONE_NUMBER_ID LOGIRAD_WHATSAPP_VERIFY_TOKEN \
+                     LOGIRAD_WHATSAPP_APP_SECRET LOGIRAD_WHATSAPP_DISPLAY_NUMBER; do
+              v="${!k}"
+              [ -n "$v" ] && printf "%s='%s'\n" "$k" "${v//\'/\'\\\'\'}"
+            done
+          } | ssh server "umask 077 && cat > $APP_DIR/.deploy.env"
+
+      - name: Deploy
+        if: steps.cfg.outputs.skip != 'true'
+        run: ssh server "APP_DIR=$APP_DIR bash $APP_DIR/scripts/deploy-remote.sh"
+
+      - name: Check the public site
+        if: steps.cfg.outputs.skip != 'true'
+        env:
+          DOMAIN: ${{ secrets.DOMAIN }}
+        run: |
+          for i in $(seq 1 24); do
+            if curl -fsS "https://$DOMAIN/api/health"; then echo; echo "Live at https://$DOMAIN"; exit 0; fi
+            sleep 10
+          done
+          echo "::warning::https://$DOMAIN is not reachable yet. Check that DNS points to the server and ports 80/443 are open."

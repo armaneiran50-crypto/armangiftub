@@ -37,7 +37,32 @@ frontend/   Next.js فارسی و راست‌چین: صفحه اصلی، فرم 
 docker-compose.yml + Caddyfile   اجرای کامل با HTTPS خودکار
 ```
 
-## نصب روی سرور (Ubuntu + Docker)
+## نصب خودکار روی سرور با GitHub Actions (پیشنهادی)
+
+بدون نیاز به کار با ترمینال سرور: GitHub با SSH به سرور وصل می‌شود، Docker را نصب می‌کند، کد را می‌فرستد و سایت را بالا می‌آورد.
+
+۱. رکورد A دامنه را به IP سرور بدهید (پورت‌های 80 و 443 باز باشند).
+۲. در GitHub: مخزن ← **Settings ← Secrets and variables ← Actions ← New repository secret** و این‌ها را بسازید:
+
+| Secret | مقدار |
+|---|---|
+| `SERVER_HOST` | IP سرور |
+| `SERVER_USER` | نام کاربری SSH (مثلاً `root`) |
+| `SERVER_SSH_KEY` | کلید **خصوصی** SSH که به سرور دسترسی دارد (کل متن، از `-----BEGIN` تا `-----END`) |
+| `SERVER_PORT` | (اختیاری) اگر پورت SSH غیر از 22 است |
+| `DOMAIN` | مثلاً `logirad.com` |
+| `LOGIRAD_ADMIN_EMAIL` | ایمیل ورود مدیر |
+| `LOGIRAD_ADMIN_PASSWORD` | رمز مدیر (بدون علامت `'`) |
+| اختیاری | `ANTHROPIC_API_KEY` و `LOGIRAD_AI_ENABLED`=`true`، `LOGIRAD_SMTP_*`، `LOGIRAD_WHATSAPP_*` |
+
+۳. تب **Actions ← Deploy to server ← Run workflow**. از این به بعد هر تغییری که روی `main` بیاید خودکار نصب می‌شود.
+
+رمز دیتابیس و JWT secret روی خود سرور ساخته می‌شوند و از آن خارج نمی‌شوند. برنامه در `/opt/logirad` نصب می‌شود.
+
+اگر کلید SSH ندارید، روی کامپیوتر خودتان `ssh-keygen -t ed25519 -f logirad_deploy` بزنید، محتوای `logirad_deploy.pub` را
+به فایل `~/.ssh/authorized_keys` روی سرور اضافه کنید و محتوای `logirad_deploy` (بدون .pub) را در `SERVER_SSH_KEY` بگذارید.
+
+## نصب دستی روی سرور (Ubuntu + Docker)
 
 ۱. Docker را نصب کنید:
 ```bash
