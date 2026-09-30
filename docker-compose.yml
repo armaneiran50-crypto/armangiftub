@@ -1,0 +1,71 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: logirad
+      POSTGRES_USER: logirad
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U logirad"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      LOGIRAD_ENV: production
+      LOGIRAD_DATABASE_URL: postgresql+psycopg://logirad:${POSTGRES_PASSWORD}@db:5432/logirad
+      LOGIRAD_JWT_SECRET: ${LOGIRAD_JWT_SECRET:?set LOGIRAD_JWT_SECRET in .env}
+      LOGIRAD_ADMIN_EMAIL: ${LOGIRAD_ADMIN_EMAIL:-admin@logirad.local}
+      LOGIRAD_ADMIN_PASSWORD: ${LOGIRAD_ADMIN_PASSWORD:?set LOGIRAD_ADMIN_PASSWORD in .env}
+      LOGIRAD_CORS_ORIGINS: https://${DOMAIN:-localhost}
+      LOGIRAD_PUBLIC_URL: https://${DOMAIN:-localhost}
+      LOGIRAD_SMTP_HOST: ${LOGIRAD_SMTP_HOST:-}
+      LOGIRAD_SMTP_PORT: ${LOGIRAD_SMTP_PORT:-587}
+      LOGIRAD_SMTP_USER: ${LOGIRAD_SMTP_USER:-}
+      LOGIRAD_SMTP_PASSWORD: ${LOGIRAD_SMTP_PASSWORD:-}
+      LOGIRAD_SMTP_FROM: ${LOGIRAD_SMTP_FROM:-Logirad <no-reply@localhost>}
+      LOGIRAD_WHATSAPP_TOKEN: ${LOGIRAD_WHATSAPP_TOKEN:-}
+      LOGIRAD_WHATSAPP_PHONE_NUMBER_ID: ${LOGIRAD_WHATSAPP_PHONE_NUMBER_ID:-}
+      LOGIRAD_WHATSAPP_VERIFY_TOKEN: ${LOGIRAD_WHATSAPP_VERIFY_TOKEN:-}
+      LOGIRAD_WHATSAPP_APP_SECRET: ${LOGIRAD_WHATSAPP_APP_SECRET:-}
+      LOGIRAD_WHATSAPP_DISPLAY_NUMBER: ${LOGIRAD_WHATSAPP_DISPLAY_NUMBER:-}
+      LOGIRAD_AI_ENABLED: ${LOGIRAD_AI_ENABLED:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8000
+        SITE_URL: https://${DOMAIN:-localhost}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - frontend
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
